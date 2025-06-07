@@ -40,7 +40,7 @@ class Weapon:
             mag_x = x + math.cos(angle + math.pi/2) * 8
             mag_y = y + math.sin(angle + math.pi/2) * 8
             pygame.draw.line(surface, self.color, (mag_x, mag_y), 
-                           (mag_x + math.cos(angle + math.pi/2) * 12, 
+                           (mag_x + math.cos(angle + math.pi/2) * 12,
                             mag_y + math.sin(angle + math.pi/2) * 12), 4)
             
         elif self.model_type == "rifle":
@@ -165,6 +165,9 @@ class Player:
         # 计算目标速度
         target_vel_x = 0
         target_vel_y = 0
+
+        # if keys[pygame.K_a]:
+        #     print('move...')
         
         if keys[pygame.K_a]: target_vel_x -= self.max_speed
         if keys[pygame.K_d]: target_vel_x += self.max_speed
@@ -234,6 +237,7 @@ class Enemy:
         self.speed = 1.5
         self.health = 25
         self.damage = 5
+        self.size = 15  # 添加size属性的初始化
         
     def move(self, target_x, target_y):
         angle = math.atan2(target_y - self.y, target_x - self.x)
@@ -262,8 +266,6 @@ class Bullet:
             # 手枪：小圆形子弹
             pygame.draw.circle(surface, self.weapon.color, (int(self.x), int(self.y)), 3)
             
-        elif self.weapon.model_type == "smg":
-            # 冲锋枪：小而快的椭圆形子弹
             pygame.draw.ellipse(surface, self.weapon.color, 
                               (self.x - 4, self.y - 2, 8, 4))
             
@@ -316,6 +318,7 @@ class Boss(Enemy):
         self.rage_mode = False
         self.last_phase_change = pygame.time.get_ticks()
         self.phase_change_delay = 1000
+        self.phase = 1  # 添加phase属性的初始化
         # 移动相关属性
         self.movement_timer = pygame.time.get_ticks()
         self.movement_delay = 1500
@@ -553,12 +556,23 @@ clock = pygame.time.Clock()
 while running:
     current_time = pygame.time.get_ticks()
     
+    # 获取按键状态并更新玩家移动（移到事件循环之前）
+    keys = pygame.key.get_pressed()
+    player.move(keys)
+    
+    # 更新玩家位置
+    player.x += player.velocity_x
+    player.y += player.velocity_y
+    
+    # 确保玩家不会移出屏幕
+    player.x = max(20, min(player.x, 780))
+    player.y = max(20, min(player.y, 580))
+    
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # 左键射击
-                # 射击逻辑...
                 weapon = player.weapons[player.current_weapon]
                 if current_time - weapon.last_shot >= weapon.fire_rate:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -666,9 +680,44 @@ while running:
             if player.health <= 0:
                 running = False
     
-    # 获取按键状态
-    keys = pygame.key.get_pressed()
-    player.move(keys)
+    # 更新玩家位置
+    player.x += player.velocity_x
+    player.y += player.velocity_y
+    
+    # 确保玩家不会移出屏幕
+    player.x = max(20, min(player.x, 780))
+    player.y = max(20, min(player.y, 580))
+    
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # 左键射击
+                # 射击逻辑...
+                weapon = player.weapons[player.current_weapon]
+                if current_time - weapon.last_shot >= weapon.fire_rate:
+                    bullets.append(Bullet(player.x, player.y, player.angle, weapon))
+                    weapon.last_shot = current_time
+            elif event.button == 3:  # 右键拾取
+                # 拾取逻辑保持不变...
+                for pack in health_packs[:]:
+                    if math.hypot(mouse_x - pack.x, mouse_y - pack.y) < 20:
+                        player.health = min(player.max_health, player.health + pack.heal_amount)
+                        health_packs.remove(pack)
+                
+                for pack in armor_packs[:]:
+                    if math.hypot(mouse_x - pack.x, mouse_y - pack.y) < 20:
+                        player.armor = min(player.max_armor, player.armor + pack.armor_amount)
+                        armor_packs.remove(pack)
+                
+                for drop in weapon_drops[:]:
+                    if math.hypot(mouse_x - drop.x, mouse_y - drop.y) < 20:
+                        player.add_weapon(drop.weapon)
+                        weapon_drops.remove(drop)
+        elif event.type == pygame.KEYDOWN:
+            # 切换武器
+            if event.key in [pygame.K_1, pygame.K_2, pygame.K_3]:
+                player.current_weapon = event.key - pygame.K_1
     
     # 更新武器掉落物的悬停状态
     mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -678,6 +727,7 @@ while running:
     # 更新子弹
     for bullet in bullets[:]:
         bullet.move()
+        # 检查子弹是否击中敌人
         # 检查子弹是否击中敌人
         for enemy in enemies[:]:
             if math.hypot(bullet.x - enemy.x, bullet.y - enemy.y) < 15:
